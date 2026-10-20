@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chess Coach — Move & Mate Finder</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#141c30;--panel2:#1b2740;--text:#eef3ff;--muted:#9baac7;--accent:#73e0b0;--line:#2b3955;--gold:#ffd166}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#1a2944 0,#0b1020 60%);color:var(--text);font:15px system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1080px;margin:auto;padding:18px}.brand{display:flex;align-items:center;gap:12px;margin:8px 0 18px}.logo{width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,#73e0b0,#4ca6ff);display:grid;place-items:center;color:#081321;font-size:27px;font-weight:900}.brand h1{font-size:23px;margin:0}.brand p{margin:3px 0 0;color:var(--muted);font-size:13px}
+.layout{display:grid;grid-template-columns:minmax(280px,1.05fr) minmax(280px,1fr);gap:16px}.panel{background:rgba(20,28,48,.96);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 14px 35px #0002}
+.boardwrap{max-width:590px;margin:auto}.board{display:grid;grid-template-columns:repeat(8,1fr);aspect-ratio:1;border:3px solid #25344d;border-radius:7px;overflow:hidden;user-select:none}.sq{display:grid;place-items:center;position:relative;cursor:pointer;aspect-ratio:1;font-size:clamp(25px,6vw,52px);line-height:1}.light{background:#e8edf4}.dark{background:#668a78}.piece.white{color:#fff;text-shadow:0 2px 2px #18202c,1px 0 #18202c,-1px 0 #18202c,0 -1px #18202c}.piece.black{color:#18202c;text-shadow:0 1px 0 #fff6}.sq.selected{box-shadow:inset 0 0 0 4px #ffd166}.sq.last{background:#c7bd65}.sq.target:after{content:"";width:25%;height:25%;border-radius:50%;background:#17263b66;position:absolute}.sq.capture:after{content:"";position:absolute;inset:4px;border:4px solid #17263b88;border-radius:50%}.coord{position:absolute;font-size:10px;font-weight:800;left:3px;top:2px;opacity:.7;color:#17263b}
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.btn{border:1px solid var(--line);border-radius:11px;padding:10px 13px;background:var(--panel2);color:var(--text);font-weight:700;cursor:pointer}.btn.primary{background:var(--accent);color:#081a16;border-color:transparent}.btn:disabled{opacity:.45;cursor:wait}label{display:block;color:var(--muted);font-size:12px;margin:14px 0 6px}input,select,textarea{width:100%;padding:11px;border-radius:10px;border:1px solid var(--line);background:#0d1425;color:var(--text);font:inherit}h2{font-size:17px;margin:0 0 12px}.hint{color:var(--muted);font-size:12px;line-height:1.5}.status{margin:12px 0 0;color:var(--muted);font-size:13px;min-height:20px}.movebox{background:#0d1425;border:1px solid var(--line);border-radius:13px;padding:13px;margin:10px 0}.bigmove{font-size:28px;font-weight:850;color:var(--accent);letter-spacing:.4px}.sub{color:var(--muted);font-size:13px}.resulttitle{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}.lines{display:grid;gap:8px}.line{padding:10px 12px;border-radius:10px;background:#0d1425;border:1px solid var(--line);font-family:ui-monospace,monospace}.line b{color:var(--gold)}.notice{border-left:3px solid var(--gold);padding:9px 11px;background:#2b261a66;border-radius:0 9px 9px 0;color:#e8d9ad;font-size:12px;line-height:1.5;margin-top:12px}.footer{color:var(--muted);font-size:12px;margin:16px 2px;line-height:1.5}
+@media(max-width:760px){main{padding:12px}.layout{grid-template-columns:1fr}.panel{padding:12px}.brand h1{font-size:20px}}
+</style>
+</head>
+<body><main>
+<header class="brand"><div class="logo">♞</div><div><h1>Chess Coach</h1><p>Best moves · Tactical ideas · Checkmate finder</p></div></header>
+<div class="layout">
+<section class="panel">
+<div class="boardwrap"><div id="board" class="board" aria-label="Interactive chess board"></div></div>
+<div class="controls">
+<button class="btn" id="flip">Flip board</button><button class="btn" id="undo">Undo move</button><button class="btn" id="reset">Start position</button>
+</div>
+<label for="fen">Position FEN (paste a position from your chess app)</label>
+<input id="fen" spellcheck="false" value="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1">
+<div class="controls"><button class="btn" id="load">Load position</button><button class="btn primary" id="analyze">Find best move</button></div>
+<div class="controls"><button class="btn" id="copyfen">Copy FEN</button><button class="btn" id="copybest">Copy best move</button><button class="btn" id="openchess">Open Chess.com</button></div>
+<div id="status" class="status">Tap a piece, then a destination square to play moves on this board.</div>
+<p class="hint">To use with another chess app: copy the current position's FEN from that app (if supported), analyze it here, then play the suggested move yourself.</p>
+</section>
+<section class="panel">
+<h2>Engine analysis</h2>
+<div class="movebox"><div class="resulttitle">Best move</div><div id="best" class="bigmove">—</div><div id="bestdetail" class="sub">Analyze a position to get the move and destination squares.</div></div>
+<div class="movebox"><div class="resulttitle">Checkmate outlook</div><div id="mate" class="bigmove">—</div><div id="matedetail" class="sub">If the position is a forced mate, the engine will show the mate score and line.</div></div>
+<div class="movebox"><div class="resulttitle">Brilliant / tactical idea</div><div id="brilliant" style="font-weight:750">Waiting for analysis</div><div id="brilliantdetail" class="sub">The site can highlight a strong tactical candidate, but it cannot guarantee the official “Brilliant” badge used by some chess apps.</div></div>
+<div class="resulttitle" style="margin:16px 0 8px">Top candidate lines</div><div id="lines" class="lines"><div class="line">No analysis yet.</div></div>
+<div class="notice">Use analysis as a study aid and follow Chess.com’s fair-play rules. Do not use outside engine assistance during live games where it is prohibited. The engine service analyzes positions it has cached. If it says a position is unavailable, try another position or use a chess app with a built-in Stockfish engine. Never assume a move guarantees checkmate unless the result explicitly shows a forced mate.</div>
+</section></div>
+<div class="footer">Analysis uses the Lichess Cloud Eval service and requires an internet connection. This is a study companion: it does not connect to or control another chess app. “Brilliant” is a platform-specific label, so tactical suggestions are described as candidates rather than official badges.</div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script>
+(() => {
+const glyph={wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
+let game=new Chess(), flipped=false, selected=null, targets=[], lastMove=null, history=[], busy=false;
+const $=id=>document.getElementById(id);
+const files="abcdefgh", ranks="12345678";
+function squareName(r,c){return files[c]+ranks[7-r]}
+function render(){
+ const b=$("board"); b.innerHTML="";
+ for(let vr=0;vr<8;vr++) for(let vc=0;vc<8;vc++){
+  const r=flipped?7-vr:vr,c=flipped?7-vc:vc,sq=squareName(r,c),p=game.get(sq),el=document.createElement("div");
+  el.className="sq "+(((r+c)%2===0)?"light":"dark");
+  if(selected===sq)el.classList.add("selected");
+  if(lastMove&&(lastMove.from===sq||lastMove.to===sq))el.classList.add("last");
+  if(targets.includes(sq))el.classList.add(p?"capture":"target");
+  if(vc===0){let co=document.createElement("span");co.className="coord";co.textContent=ranks[r];el.appendChild(co)}
+  if(vr===7){let co=document.createElement("span");co.className="coord";co.style.left="auto";co.style.right="3px";co.style.top="auto";co.style.bottom="1px";co.textContent=files[c];el.appendChild(co)}
+  if(p){let sp=document.createElement("span");sp.className="piece "+(p.color==="w"?"white":"black");sp.textContent=glyph[p.color+p.type];el.appendChild(sp)}
+  el.addEventListener("click",()=>tap(sq)); b.appendChild(el);
+ }
+ $("fen").value=game.fen();
+}
+function tap(sq){
+ if(busy)return;
+ const p=game.get(sq);
+ if(selected&&targets.includes(sq)){
+  const from=selected; let move=game.move({from,to:sq,promotion:"q"});
+  if(!move){selected=null;targets=[];render();return}
+  history.push(move);lastMove=move;selected=null;targets=[];render();
+  $("status").textContent=(game.turn()==="w"?"White":"Black")+" to move. Analyze the new position when ready.";return;
+ }
+ if(p&&p.color===game.turn()){selected=sq;targets=game.moves({square:sq,verbose:true}).map(m=>m.to)}else{selected=null;targets=[]}
+ render();
+}
+async function analyze(){
+ if(busy)return;
+ busy=true;$("analyze").disabled=true;$("status").textContent="Asking the analysis engine…";$("best").textContent="Thinking…";$("lines").innerHTML="";
+ try{
+  const fen=game.fen();
+  const url="https://lichess.org/api/cloud-eval?fen="+encodeURIComponent(fen)+"&multiPv=5&variant=standard";
+  const res=await fetch(url,{headers:{Accept:"application/json"}});
+  if(!res.ok)throw new Error(res.status===404?"This position is not in the cloud engine cache.":"Engine service returned HTTP "+res.status+".");
+  const data=await res.json();
+  if(!data.pvs||!data.pvs.length)throw new Error("No candidate lines were returned.");
+  const turn=game.turn()==="w"?"White":"Black";
+  const bestLine=data.pvs[0], tokens=bestLine.moves.split(" "), uci=tokens[0]||"";
+  const from=uci.slice(0,2),to=uci.slice(2,4),promotion=uci[4]||"";
+  let san=uci;
+  try{let copy=new Chess(fen);const m=copy.move({from,to,promotion:promotion||"q"});if(m)san=m.san}catch(e){}
+  $("best").textContent=san+"  ("+from+" → "+to+")";
+  $("bestdetail").textContent=turn+" to move · "+(data.depth?"Depth "+data.depth+" · ":"")+"Evaluation: "+formatEval(bestLine);
+  if(typeof bestLine.mate==="number"){
+   $("mate").textContent=bestLine.mate===0?"Mate now":(bestLine.mate>0?"Mate in "+bestLine.mate:"Being mated in "+Math.abs(bestLine.mate));
+   $("matedetail").textContent="Best line: "+prettyLine(fen,bestLine.moves);
+  }else{$("mate").textContent="No forced mate shown";$("matedetail").textContent="The returned top line does not report a forced mate. This is not proof that no mate exists."}
+  // Conservative heuristic: show candidate as tactical, never assert an official brilliant badge.
+  const second=data.pvs[1];
+  if(bestLine.mate!==undefined){$("brilliant").textContent="Mate tactic found";$("brilliantdetail").textContent="The top line reports a forced-mate score. Follow the displayed line carefully."}
+  else if(second && Math.abs((bestLine.cp||0)-(second.cp||0))>=180){$("brilliant").textContent="Strong tactical candidate";$("brilliantdetail").textContent="The top line scores notably better than the next candidate. Check whether the move wins material or creates a threat; this is not an official Brilliant badge."}
+  else{$("brilliant").textContent="No clear brilliant-move signal";$("brilliantdetail").textContent="Play the top move for the engine's recommendation. A move's official Brilliant label depends on the platform's own criteria."}
+  $("lines").innerHTML="";
+  data.pvs.slice(0,5).forEach((pv,i)=>{let div=document.createElement("div");div.className="line";div.innerHTML="<b>"+(i+1)+".</b> "+escapeHtml(prettyLine(fen,pv.moves))+"<br><span class='sub'>"+escapeHtml(formatEval(pv))+"</span>";$("lines").appendChild(div)});
+  $("status").textContent="Analysis complete. Suggested move: "+from+" to "+to+".";
+ }catch(err){$("best").textContent="Unavailable";$("bestdetail").textContent=err.message;$("mate").textContent="—";$("matedetail").textContent="Try a common position, check your internet connection, or use a local Stockfish app.";$("brilliant").textContent="Could not assess";$("brilliantdetail").textContent="No engine result was returned.";$("lines").innerHTML='<div class="line">No candidate lines available.</div>';$("status").textContent=err.message}
+ finally{busy=false;$("analyze").disabled=false}
+}
+function formatEval(pv){if(typeof pv.mate==="number")return "Mate score: "+pv.mate;if(typeof pv.cp==="number")return "Evaluation: "+(pv.cp>0?"+":"")+(pv.cp/100).toFixed(2);return "Evaluation unavailable"}
+function prettyLine(fen,uciLine){const g=new Chess(fen);let out=[];for(const u of uciLine.split(" ")){if(u.length<4)continue;let m=g.move({from:u.slice(0,2),to:u.slice(2,4),promotion:u[4]||"q"});if(!m)break;out.push(m.san)}return out.join(" ")}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+$("analyze").addEventListener("click",analyze);
+async function copyText(value, label){
+ try{
+  if(navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(value);
+  else {
+   const ta=document.createElement("textarea");ta.value=value;ta.style.position="fixed";ta.style.opacity="0";
+   document.body.appendChild(ta);ta.select();const ok=document.execCommand("copy");ta.remove();
+   if(!ok) throw new Error("Copy is not available in this browser.");
+  }
+  $("status").textContent=label+" copied to clipboard.";
+ }catch(e){$("status").textContent="Could not copy automatically. Please select and copy the text manually."}
+}
+$("copyfen").addEventListener("click",()=>copyText(game.fen(),"FEN"));
+$("copybest").addEventListener("click",()=>{
+ const value=$("best").textContent;
+ if(!value || value==="—" || value==="Thinking…" || value==="Unavailable"){ $("status").textContent="Analyze a position first."; return; }
+ copyText(value,"Best move");
+});
+$("openchess").addEventListener("click",()=>window.open("https://www.chess.com/","_blank","noopener,noreferrer"));
+$("flip").addEventListener("click",()=>{flipped=!flipped;render()});
+$("reset").addEventListener("click",()=>{game.reset();history=[];lastMove=null;selected=null;targets=[];render();$("status").textContent="Starting position ready."});
+$("undo").addEventListener("click",()=>{const m=game.undo();if(m){lastMove=null;selected=null;targets=[];render();$("status").textContent="Last move undone."}});
+$("load").addEventListener("click",()=>{const g=new Chess();if(g.load($("fen").value.trim())){game=g;history=[];lastMove=null;selected=null;targets=[];render();$("status").textContent="Position loaded. Tap Find best move."}else $("status").textContent="That FEN is invalid. Copy the full FEN and try again."});
+render();
+})();
+</script></body></html>
